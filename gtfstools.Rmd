@@ -1,0 +1,342 @@
+---
+title: "gtfstools"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Reading and manipulating GTFS files with data.table 
+
+```{r }
+library(gtfstools)
+path <- system.file("extdata/spo_gtfs.zip", package = "gtfstools")
+gtfs <- read_gtfs(path) # transform to object, data.table 
+names(gtfs)
+head(gtfs$trips)
+```
+
+```{r}
+# Using data.table to manipulate the dataset 
+original_headway <- gtfs$frequencies$headway_secs # save original data
+head(gtfs$frequencies, 3)
+
+gtfs$frequencies[, headway_secs := headway_secs + 100] # update headway + 100s
+# gtfs$frequencies <- gtfs$frequencies$headway_secs + 100 
+head(gtfs$frequencies, 3)
+
+# restores the original headway
+gtfs$frequencies[, headway_secs := original_headway]
+head(gtfs$frequencies, 3)
+```
+
+```{r}
+# write modified GTFS objects to GTFS txt files again
+export_path <- tempfile("new_gtfs", fileext = ".zip")  # points to the path where gtfs should be written to 
+write_gtfs(gtfs, path = export_path) # write gtfs to path 
+zip::zip_list(export_path)[, c("filename", "compressed_size", "timestamp")] # list files within feed 
+```
+
+### Calculating trip speed
+
+```{r}
+# calculating the speeds of all trips (km/h)
+speeds <- get_trip_speed(gtfs)
+head(speeds)
+nrow(speeds)
+```
+
+```{r}
+# calculates the speeds of two specific trips (km/h)
+speeds <- get_trip_speed(gtfs, trip_id = c("CPTM L07-0", "2002-10-0"))
+speeds
+```
+
+```{r}
+# calculate the length of all trips (km)
+lengths <- get_trip_length(gtfs, file = "shapes")
+head(lengths)
+```
+
+```{r}
+# calculates the duration of all trips (minute)
+durations <- get_trip_duration(gtfs)
+head(durations)
+```
+
+### Combining and filtering feeds
+
+#### Combine / merge GTFS objects that have same data table from 2 gtfs
+
+```{r}
+# Remove duplication of record
+gtfs$agency
+gtfs$calendar
+
+no_dups_gtfs <- remove_duplicates(gtfs)
+
+no_dups_gtfs$agency
+no_dups_gtfs$calendar
+```
+
+```{r}
+# merge 2 feeds file: bus feed and rail feed for one aree
+poa_path <- system.file("extdata/poa_gtfs.zip", package = "gtfstools") # reads Porto Alegre's GTFS
+poa_gtfs <- read_gtfs(poa_path)
+poa_gtfs$agency
+
+# combines Porto Alegre's and São Paulo's GTFS objects
+combined_gtfs <- merge_gtfs(no_dups_gtfs, poa_gtfs)
+
+combined_gtfs$agency # check result 
+```
+
+#### Filtering by identifiers
+
+```{r}
+# checks pre-filter object size 
+utils::object.size(gtfs)
+```
+```{r}
+# select column with data.table 
+head(gtfs$trips[, .(trip_id, trip_headsign, shape_id)])
+
+# keeps entries related to the two specified ids
+filtered_gtfs <- filter_by_trip_id(
+  gtfs,
+  trip_id = c("CPTM L07-0", "CPTM L07-1")
+)
+
+# checks post-filter object size
+utils::object.size(filtered_gtfs)
+
+# check data after filter
+head(filtered_gtfs$trips[, .(trip_id, trip_headsign, shape_id)])
+unique(filtered_gtfs)
+unique(filtered_gtfs$shapes$shape_id)
+```
+ 
+#### Filtering by day of the week and time of the day
+
+```{r}
+# keeps services that operate on both saturday AND sunday
+
+head(no_dups_gtfs$calendar)
+
+filtered_gtfs <- filter_by_weekday(
+  no_dups_gtfs,
+  weekday = c("saturday", "sunday"),
+  combine = "and"
+)
+
+filtered_gtfs$calendar[, c("service_id", "sunday", "saturday")]
+
+# keeps services that operate on both saturday OR sunday
+
+filtered_gtfs <- filter_by_weekday(
+  no_dups_gtfs,
+  weekday = c("saturday", "sunday"),
+  combine = "or"
+)
+
+filtered_gtfs$calendar[, c("service_id", "sunday", "saturday")]
+```
+
+
+```{r}
+# filter by time of the day => apply for "frequencies"
+filtered_gtfs <- filter_by_time_of_day(gtfs, from = "05:00:00", to = "06:00:00")
+head(filtered_gtfs$frequencies)
+```
+
+#### Filtering using a spatial extent
+
+```{r}
+# Ex: SPTran's Feed, shape = 68962
+
+library(ggplot2)
+
+# creates a polygon with the bounding box of shape 68962
+# note: shape of GTFS presents a path that vehicle follows. 
+shape_68962 <- convert_shapes_to_sf(gtfs, shape_id = "68962") # convert shape to a simple feature spatial linestring object representing the route's geometry.
+bbox <- sf::st_bbox(shape_68962) # bbox is now a numeric vector containing the min/max coordinates that frame the shape (xmin: Minimum longitude (left), ymin: Minimum latitude (bottom), xmax: Maximum longitude (right), ymax: Maximum latitude (top))
+bbox_geometry <- sf::st_as_sfc(bbox) # a polygon. While st_bbox() gives a basic numerical extent, converting it into an sfc polygon makes it more flexible for spatial analysis
+
+# creates a geometry with all the shapes described in the gtfs
+all_shapes <- convert_shapes_to_sf(gtfs)
+
+ggplot() +
+  geom_sf(data = all_shapes) +
+  geom_sf(data = bbox_geometry, fill = NA, color = "red") +
+  theme_minimal()
+```
+
+```{r}
+# filter_by_sf() keeps all entries related to trips that INTERSECT with the specified polygon bbox (bbox was calculated above shape = 68962)
+filtered_gtfs <- filter_by_sf(gtfs, bbox) # This function filters the GTFS dataset (gtfs) to include only elements intersect the bounding box (bbox).
+
+# An intersection occurs when:
+## A shape (route line) passes through the bbox (even partially).
+## A shape starts or ends inside the bbox.
+## A shape completely fits inside the bbox.
+## A shape only touches the edge of the bbox.
+
+filtered_shapes <- convert_shapes_to_sf(filtered_gtfs)
+
+ggplot() +
+  geom_sf(data = filtered_shapes) +
+  geom_sf(data = bbox_geometry, fill = NA, color = "red") +
+  theme_minimal()
+```
+
+```{r}
+# try with spatial_operation = sf::st_contains 
+filtered_gtfs <- filter_by_sf(gtfs, bbox, spatial_operation = sf::st_contains)
+filtered_shapes <- convert_shapes_to_sf(filtered_gtfs)
+
+ggplot() +
+  geom_sf(data = filtered_shapes) +
+  geom_sf(data = bbox_geometry, fill = NA, color = "red") +
+  theme_minimal()
+```
+
+### Validating GTFS data
+
+```{r}
+tmpdir <- tempdir()
+
+validator_path <- download_validator(tmpdir)
+validator_path
+```
+
+```{r, eval=FALSE}
+output_dir <- tempfile("gtfs_validation")
+
+validate_gtfs(
+  path,
+  output_path = output_dir,
+  validator_path = validator_path
+)
+
+list.files(output_dir)
+```
+
+### workflow example: spatial visualization of headways
+
+1. How are the times between vehicles operating the same route (the headways) spatially distributed in SPTrans’ GTFS?
+2. Or Time differences between consecutive trips serving the same stop along the same route
+
+```{r}
+# Scope of analysis: services operating during the morning peak, between 7am and 9am, on a typical tuesday
+
+gtfs <- read_gtfs(path)
+
+library(dplyr)
+# filters the GTFS
+filtered_gtfs <- gtfs |>
+  remove_duplicates() |> 
+  filter_by_weekday("tuesday") |> 
+  filter_by_time_of_day(from = "07:00:00", to = "09:00:00")
+
+# checking the result
+filtered_gtfs$frequencies[trip_id == "2105-10-0"] # check time of the date
+filtered_gtfs$calendar
+```
+
+Data shows that each trip is associated to more than one headway, as shown above (one entry for the 7am to 7:59am interval and another for the 8am to 8:59am interval). To solve this, average headway from 7am to 9am is calculated. 
+
+Calculate the average headways weighted by the time duration of each headway:
+- Step 1: multiply each headway by the size of the time interval during which it is valid. To calculate the time intervals,first use the convert_time_to_seconds() function to calculate the start and end time of the time interval in seconds and then subtract the latter by the former.
+- Step 2: sum these multiplication results for each trip
+- Step 3: and then divide this amount by the total time interval (two hours, in our case)
+
+```{r}
+filtered_gtfs <- convert_time_to_seconds(filtered_gtfs)
+filtered_gtfs$frequencies
+
+# check how the results look like for a particular trip id
+filtered_gtfs$frequencies[trip_id == "2105-10-0"]
+
+filtered_gtfs$frequencies[, time_interval := end_time_secs - start_time_secs]
+
+average_headway <- filtered_gtfs$frequencies[,
+  .(average_headway = weighted.mean(x = headway_secs, w = time_interval)),
+  by = trip_id
+]
+
+average_headway[trip_id == "2105-10-0"]
+
+head(average_headway)
+```
+
+```{r, eval=FALSE}
+# calculate step by step (alternative option)
+library(data.table)
+
+# Sample data
+df <- data.table(
+  trip_id = c("2105-10-0", "2105-10-0"),
+  start_time = c("07:00:00", "08:00:00"),
+  end_time = c("07:59:00", "08:59:00"),
+  headway_secs = c(900, 1200)
+)
+
+# Function to convert time to seconds since midnight
+convert_time_to_seconds <- function(time_str) {
+  hms <- as.numeric(strsplit(time_str, ":")[[1]])
+  return(hms[1] * 3600 + hms[2] * 60 + hms[3])
+}
+
+# Convert start and end times to seconds
+df[, start_seconds := sapply(start_time, convert_time_to_seconds)]
+df[, end_seconds := sapply(end_time, convert_time_to_seconds)]
+
+# Calculate time interval duration
+df[, time_interval := end_seconds - start_seconds]
+
+# Compute weighted average headway
+weighted_avg_headway <- df[, sum(headway_secs * time_interval) / sum(time_interval)]
+
+# Print the result
+print(weighted_avg_headway)
+```
+
+The importance of weighted mean is: If we used a simple mean, we’d assume both headways are equally relevant. But if one headway applies for a longer period, it should have more influence on the final result. This method gives a more accurate reflection of what passengers experience.
+
+Next, visualisation of the headways (time between veicles)
+
+```{r}
+# generate each trip geometry and join this data to the average headways
+selected_trips <- average_headway$trip_id  # char vector contain trip id 
+
+geometries <- get_trip_geometry(
+  filtered_gtfs,  # gtfs data contain files, e.g. trip, shape, calendar, frequencies, stops,...
+  trip_id = selected_trips,
+  file = "shapes"
+)
+
+head(geometries)
+
+# Note: get_trip_geometry() function returns the spatial geometries of the trips in the feed. This function allows us to specify which trips we want to generate the geometries of, so we are only going to apply the procedure to the trips present in the average headways table:
+```
+
+```{r}
+# join the average headway data to the geometries and then configure the map 
+geoms_with_headways <- merge(
+  geometries,
+  average_headway,
+  by = "trip_id"
+)
+```
+
+```{r}
+# the color and line width of each trip geometry varies with its headway
+ggplot(geoms_with_headways) +
+  geom_sf(aes(color = average_headway, size = average_headway), alpha = 0.8) +
+  scale_color_gradient(high = "#132B43", low = "#56B1F7") +
+  labs(color = "Average headway", size = "Average headway") +
+  theme_minimal()
+```
+
+
