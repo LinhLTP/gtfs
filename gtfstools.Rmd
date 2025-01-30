@@ -9,7 +9,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ### Reading and manipulating GTFS files with data.table 
 
-```{r }
+```{r}
 library(gtfstools)
 path <- system.file("extdata/spo_gtfs.zip", package = "gtfstools")
 gtfs <- read_gtfs(path) # transform to object, data.table 
@@ -75,7 +75,6 @@ gtfs$agency
 gtfs$calendar
 
 no_dups_gtfs <- remove_duplicates(gtfs)
-
 no_dups_gtfs$agency
 no_dups_gtfs$calendar
 ```
@@ -89,7 +88,8 @@ poa_gtfs$agency
 # combines Porto Alegre's and São Paulo's GTFS objects
 combined_gtfs <- merge_gtfs(no_dups_gtfs, poa_gtfs)
 
-combined_gtfs$agency # check result 
+# check result 
+combined_gtfs$agency
 ```
 
 #### Filtering by identifiers
@@ -98,6 +98,7 @@ combined_gtfs$agency # check result
 # checks pre-filter object size 
 utils::object.size(gtfs)
 ```
+
 ```{r}
 # select column with data.table 
 head(gtfs$trips[, .(trip_id, trip_headsign, shape_id)])
@@ -121,7 +122,6 @@ unique(filtered_gtfs$shapes$shape_id)
 
 ```{r}
 # keeps services that operate on both saturday AND sunday
-
 head(no_dups_gtfs$calendar)
 
 filtered_gtfs <- filter_by_weekday(
@@ -133,7 +133,6 @@ filtered_gtfs <- filter_by_weekday(
 filtered_gtfs$calendar[, c("service_id", "sunday", "saturday")]
 
 # keeps services that operate on both saturday OR sunday
-
 filtered_gtfs <- filter_by_weekday(
   no_dups_gtfs,
   weekday = c("saturday", "sunday"),
@@ -154,11 +153,10 @@ head(filtered_gtfs$frequencies)
 
 ```{r}
 # Ex: SPTran's Feed, shape = 68962
-
 library(ggplot2)
-
 # creates a polygon with the bounding box of shape 68962
 # note: shape of GTFS presents a path that vehicle follows. 
+
 shape_68962 <- convert_shapes_to_sf(gtfs, shape_id = "68962") # convert shape to a simple feature spatial linestring object representing the route's geometry.
 bbox <- sf::st_bbox(shape_68962) # bbox is now a numeric vector containing the min/max coordinates that frame the shape (xmin: Minimum longitude (left), ymin: Minimum latitude (bottom), xmax: Maximum longitude (right), ymax: Maximum latitude (top))
 bbox_geometry <- sf::st_as_sfc(bbox) # a polygon. While st_bbox() gives a basic numerical extent, converting it into an sfc polygon makes it more flexible for spatial analysis
@@ -229,7 +227,6 @@ list.files(output_dir)
 
 ```{r}
 # Scope of analysis: services operating during the morning peak, between 7am and 9am, on a typical tuesday
-
 gtfs <- read_gtfs(path)
 
 library(dplyr)
@@ -338,5 +335,3 @@ ggplot(geoms_with_headways) +
   labs(color = "Average headway", size = "Average headway") +
   theme_minimal()
 ```
-
-
