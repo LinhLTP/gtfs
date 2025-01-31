@@ -1,0 +1,173 @@
+---
+title: "GTFS Transit Data Viz"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(osmdata)
+library(sf)
+library(ggspatial)
+library(rio)
+library(here)
+library(dplyr)
+```
+
+```{r}
+# opt1: set the directory 
+current_dir <- getwd()
+dataset_name <- "shapes.txt"
+dataset_path <- file.path(current_dir, "gtfs", dataset_name)
+shapes <- read.csv(dataset_path)
+head(shapes)
+
+# opt2: Define GTFS directory 
+gtfs_dir <- here("gtfs")
+
+## List and import all GTFS `.txt` files into a named list
+gtfs_data <- list.files(gtfs_dir, pattern = "\\.txt$", full.names = TRUE) %>%
+  setNames(gsub("\\.txt$", "", basename(.))) %>%
+  lapply(import)
+
+## Sample 10,000 rows from stop_times (if it exists)
+if ("stop_times" %in% names(gtfs_data)) {
+  gtfs_data$stop_times <- sample_n(gtfs_data$stop_times, 10000)
+}
+
+## Assign each dataset in gtfs_data as a separate object in the environment
+list2env(gtfs_data, envir = .GlobalEnv)
+
+## Print first few rows of each dataset
+lapply(gtfs_data, head)
+```
+
+# Plot the shape
+
+```{r}
+ggplot(shapes) +
+  geom_path(aes(shape_pt_lon, shape_pt_lat, group=shape_id), size=.2, alpha=.1) +
+  coord_equal()
+```
+
+# Heatmap of Stops With Most Trips
+
+```{r}
+# Join stop times with stop info and trips
+stops_freq <- stop_times %>%
+  inner_join(stops, by = "stop_id") %>% # keep only matching rows by inner join 
+  inner_join(trips, by = "trip_id") %>%
+  inner_join(calendar, by = "service_id") %>%
+  select(stop_id, stop_name, stop_lat, stop_lon)
+
+head(stops_freq)
+
+# Define the bounding box for OpenStreetMap (around Lisbon)
+bbox <- c(left = min(stops_freq$stop_lon) - 0.01, 
+          bottom = min(stops_freq$stop_lat) - 0.01, # ± 0.01 adds a small buffer so the area is slightly larger than the dataset 
+          right = max(stops_freq$stop_lon) + 0.01, 
+          top = max(stops_freq$stop_lat) + 0.01)
+
+# Get OpenStreetMap background
+osm_map <- opq(bbox = bbox) %>%   # qpq: overpasss query - query OpenStreetMap (OSM) data via the Overpass API.
+  add_osm_feature(key = "highway") %>%
+  osmdata_sf()
+
+# Plot the map with a density/heatmap trips/stops
+ggplot() +
+  geom_sf(data = osm_map$osm_lines, color = "gray80", size = 0.3) + # OSM background roads
+  stat_density2d(data = stops_freq, aes(x = stop_lon, y = stop_lat, alpha=..level..), # variable transparency according to number of trips
+                 size = .5, color='black', bins=6, geom = "polygon", fill='blue') # use 6 bins(transparency levels) to reprisent different densities
+
+# Plot the density heatmap on OpenStreetMap
+ggplot() +
+  geom_sf(data = osm_map$osm_lines, color = "gray80", size = 0.3) + 
+  stat_density2d_filled(data = stops_freq, aes(x = stop_lon, y = stop_lat, fill = ..level..), # level = category type (discrete)
+                        bins = 10, alpha = 0.5) +  # Density heatmap
+  scale_fill_viridis_d(option = "plasma") +  # Use Viridis scale: scale_fill_viridis_d NOT scale_fill_viridis_c because Discrete (factor) values
+  annotation_scale(location = "bl", width_hint = 0.5) 
+
+
+# Plot the density heatmap on OpenStreetMap
+ggplot() +
+  geom_sf(data = osm_map$osm_lines, color = "gray80", size = 0.3) + 
+  stat_density2d_filled(data = stops_freq, aes(x = stop_lon, y = stop_lat, fill = ..level..),  # category 
+                        bins = 10, alpha = 0.5) +  
+  geom_point(data = stops_freq, aes(x = stop_lon, y = stop_lat), color = "black", size = 0.5, alpha = 0.7) + # Stops points
+  scale_fill_viridis_d(option = "plasma") +  
+  annotation_scale(location = "bl", width_hint = 0.5) + 
+  annotation_north_arrow(location = "tr", which_north = "true") +
+  labs(title = "Public Transport Density Heatmap (Lisbon)",
+       subtitle = "Based on GTFS stops and trips",
+       fill = "Density") +
+  theme_minimal()
+```
+
+# Plot Stops With Size Based on Trip Frequency
+
+```{r}
+# Join stop times with stop info and trips, then count trip frequency
+stops_freq <- stop_times %>%
+  inner_join(stops, by = "stop_id") %>%
+  inner_join(trips, by = "trip_id") %>%
+  inner_join(calendar, by = "service_id") %>%
+  select(stop_id, stop_name, stop_lat, stop_lon) %>% 
+  group_by(stop_id, stop_name, stop_lat, stop_lon) %>% 
+  summarize(count=n()) %>% 
+  filter(count >= 5)
+
+# Get OpenStreetMap background
+osm_map <- opq(bbox = bbox) %>%   
+  add_osm_feature(key = "highway") %>%
+  osmdata_sf()
+
+# plot
+ggplot() +
+  geom_sf(data = osm_map$osm_lines, color = "gray80", size = 0.3) +
+  geom_point(data = stops_freq, aes(x=stop_lon, y=stop_lat, size=count, fill=count), shape=21, alpha=0.8, colour = "blue")+ 
+     scale_size_continuous(range = c(0, 9), guide = FALSE) + # size proportional to number of trips
+     scale_fill_distiller()  # circle fill proportional to number of trips
+```
+
+# Road Network 
+
+```{r}
+# Define the bounding box (Lisbon area)
+# Option 1 - not receommend 
+bbox <- c(-9.2, 38.7, -9.1, 38.77)
+
+streets <- opq(bbox = bbox) %>%
+  add_osm_feature(key = "highway") %>%
+  osmdata_sf()
+
+# Option 2 - Prefer
+# Define the bounding box for OpenStreetMap (around Lisbon)
+bbox <- c(left = min(stops_freq$stop_lon) - 0.01, 
+          bottom = min(stops_freq$stop_lat) - 0.01, # ± 0.01 adds a small buffer so the area is slightly larger than the dataset 
+          right = max(stops_freq$stop_lon) + 0.01, 
+          top = max(stops_freq$stop_lat) + 0.01)
+
+# Get OpenStreetMap background
+osm_map <- opq(bbox = bbox) %>%   # qpq: overpasss query - query OpenStreetMap (OSM) data via the Overpass API.
+  add_osm_feature(key = "highway") %>%
+  osmdata_sf()
+```
+
+```{r}
+# Convert 'highway' column to a factor for better color distinction
+streets$osm_lines$highway <- as.factor(streets$osm_lines$highway)
+
+# Plot the map with roads colored by highway type
+ggplot() +
+  geom_sf(data = streets$osm_lines, 
+          aes(color = highway),  # Color by highway type
+          size = 2.5) +
+  geom_path(data = shapes, aes(shape_pt_lon, shape_pt_lat, group = shape_id), size = .1, alpha = .5, color='blue') + # adding GTFS shapes
+  annotation_scale(location = "bl", width_hint = 0.5) +
+  annotation_north_arrow(location = "tr", which_north = "true") +
+  coord_sf(expand = FALSE) +
+  scale_color_viridis_d(option = "plasma") +
+  labs(title = "Road Network in Lisbon",
+       color = "Highway Type") +
+  theme_minimal() +
+  theme(legend.position = "none") 
+```
