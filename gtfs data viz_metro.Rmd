@@ -1,0 +1,125 @@
+---
+title: "Transit data viz - Santiago Subway called Metro"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE, error=FALSE}
+library(ggplot2)
+library(osmdata)
+library(sf)
+library(ggspatial)
+library(rio)
+library(here)
+library(dplyr)
+library(ggthemes)
+```
+
+# Define directory 
+
+```{r}
+# Define GTFS directory 
+# routes <- read.csv("data/routes.txt")
+gtfs_dir <- here("gtfs_metro")
+
+gtfs_data <- list.files(gtfs_dir, pattern = "\\.txt$", full.names = TRUE) %>%
+  setNames(gsub("\\.txt$", "", basename(.))) %>%
+  lapply(import)
+
+list2env(gtfs_data, envir = .GlobalEnv)
+
+lapply(gtfs_data, head)
+```
+
+# Find Metro's Stops & Routes, Metro's Shapes & Routes 
+
+## Metro stops & routes
+
+The GTFS dataset contains information for both bus, metro/subway, LRT, commuter rail or/and other public transport. In this analysis, we need obtain the stops and routes which belong to Metro. 
+
+The Metro stops and routes are characterized as follows:
+
+a) Metro Stops (stops_metro): Metro stops have purely alphabetical or special character IDs. Hence, the stop_id does not contain any digits (!grepl("\\d", stop_id)). 
+b) Metro Routes (routes_metro): Metro routes are identified by a pattern like "L1", "L2", "L10", etc. Therefore, the route_id starts with "L" followed by a digit (grepl("^L\\d", route_id)).
+
+```{r}
+stops_metro <- stops %>% filter(!grepl("\\d", stop_id))
+routes_metro <- routes %>% filter(grepl("^L\\d", route_id))
+```
+
+## Metro shapes & routes 
+
+```{r}
+# The goal here is to select Metro shape entries that correspond to Metro routes.
+shapes_metro <- shapes %>% 
+  filter(shape_id %in% trips$shape_id[trips$route_id %in% routes_metro$route_id]) %>% # it shows the relations amongst txt file 
+  arrange(shape_id, shape_pt_sequence)
+```
+
+# Get colour for each Metro lines
+
+First, get colour for whole network 
+
+```{r}
+# Combine Shape - trip - route 
+shapes_colors <- left_join(left_join(shapes %>% select(shape_id) %>% unique(),
+                                     trips %>% select(shape_id, route_id) %>% unique(),
+                                     by = "shape_id"),
+                           routes %>% select(route_id, route_color) %>% unique(),
+                           by = "route_id") %>%
+  mutate(route_color = paste0("#", route_color))
+
+# Step 1: Extract unique shape IDs from shapes dataset
+shapes_unique <- shapes %>% select(shape_id) %>% unique()
+
+# Step 2: Extract unique shape-to-route mappings from trips dataset
+trips_unique <- trips %>% select(shape_id, route_id) %>% unique()
+
+# Step 3: Join shapes with trip data to get route_id
+shapes_with_routes <- left_join(shapes_unique, trips_unique, by = "shape_id")
+
+# Step 4: Extract unique route_id and route_color from routes dataset
+routes_unique <- routes %>% select(route_id, route_color) %>% unique()
+
+# Step 5: Join the shapes_with_routes data with route colors
+shapes_colors <- left_join(shapes_with_routes, routes_unique, by = "route_id")
+
+# Step 6: Format route_color to ensure it has a '#' prefix
+shapes_colors <- shapes_colors %>% mutate(route_color = paste0("#", route_color))
+```
+
+Then, get colour for metro only. The code creates `shapes_colors_metro`, a filtered version of `shapes_colors` that includes only shape IDs associated with Metro routes. It does this by first identifying `shape_id`s that belong to trips where the `route_id` is in `routes_metro`, ensuring that only Metro-related shapes are retained. 
+
+The `unique()` function removes any duplicate rows that may exist after the filtering process. Finally, the dataset is arranged by `shape_id` to maintain an organized structure, making it easier to analyze and visualize Metro route colors systematically.
+
+```{r}
+shapes_colors_metro <- shapes_colors %>%
+  filter(shape_id %in% trips$shape_id[trips$route_id %in% routes_metro$route_id]) %>% unique() %>%
+  arrange(shape_id)
+```
+
+# Plot 
+
+```{r}
+p1 <- ggplot() +
+  geom_path(data=shapes, aes(shape_pt_lon, shape_pt_lat, group=shape_id), color="white", size=.2, alpha=.05) +
+  geom_path(data=shapes_metro, aes(shape_pt_lon, shape_pt_lat, group=shape_id, colour=shape_id), size = 2, alpha=.7) +
+  scale_color_manual(values=shapes_colors_metro$route_color) +
+  geom_point(data=stops_metro, aes(stop_lon, stop_lat), shape=21, colour="white", alpha =.8) +
+  coord_equal() +
+  theme_void() +  # Replacing theme_null() with theme_void()
+  theme(plot.background = element_rect(fill = "black", colour = "black"),
+        title = element_text(hjust=1, colour="white", size = 8),
+        axis.title.x = element_text(hjust=0, colour="white", size = 7)) +
+  # xlab(sprintf("Joshua Kunst | Jkunst.com %s",format(Sys.Date(), "%Y"))) +
+  ggtitle("TRANSANTIAGO\nSantiago's public transport system") +
+  theme(legend.position = "none") 
+p1
+```
+
+```{r}
+ggsave(filename = "plot/gtfs-transantiago.pdf", plot = p1, bg = "black")
+```
