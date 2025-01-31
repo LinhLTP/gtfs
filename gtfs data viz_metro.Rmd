@@ -38,10 +38,7 @@ lapply(gtfs_data, head)
 
 ## Metro stops & routes
 
-The GTFS dataset contains information for both bus, metro/subway, LRT, commuter rail or/and other public transport. In this analysis, we need obtain the stops and routes which belong to Metro. 
-
-The Metro stops and routes are characterized as follows:
-
+The GTFS dataset contains information for both bus, metro/subway, LRT, commuter rail or/and other public transport. In this analysis, we need obtain the stops and routes which belong to Metro. The Metro stops and routes are characterized as follows:
 a) Metro Stops (stops_metro): Metro stops have purely alphabetical or special character IDs. Hence, the stop_id does not contain any digits (!grepl("\\d", stop_id)). 
 b) Metro Routes (routes_metro): Metro routes are identified by a pattern like "L1", "L2", "L10", etc. Therefore, the route_id starts with "L" followed by a digit (grepl("^L\\d", route_id)).
 
@@ -91,9 +88,7 @@ shapes_colors <- left_join(shapes_with_routes, routes_unique, by = "route_id")
 shapes_colors <- shapes_colors %>% mutate(route_color = paste0("#", route_color))
 ```
 
-Then, get colour for metro only. The code creates `shapes_colors_metro`, a filtered version of `shapes_colors` that includes only shape IDs associated with Metro routes. It does this by first identifying `shape_id`s that belong to trips where the `route_id` is in `routes_metro`, ensuring that only Metro-related shapes are retained. 
-
-The `unique()` function removes any duplicate rows that may exist after the filtering process. Finally, the dataset is arranged by `shape_id` to maintain an organized structure, making it easier to analyze and visualize Metro route colors systematically.
+Then, get colour for metro only. The code creates `shapes_colors_metro`, a filtered version of `shapes_colors` that includes only shape IDs associated with Metro routes. It does this by first identifying `shape_id`s that belong to trips where the `route_id` is in `routes_metro`, ensuring that only Metro-related shapes are retained. The `unique()` function removes any duplicate rows that may exist after the filtering process. Finally, the dataset is arranged by `shape_id` to maintain an organized structure, making it easier to analyze and visualize Metro route colors systematically.
 
 ```{r}
 shapes_colors_metro <- shapes_colors %>%
