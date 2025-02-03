@@ -1,4 +1,4 @@
-# General Transit Feed Specification (GTFS) Repository
+# General Transit Feed Specification (GTFS) 
 
 ## Introduction
 
@@ -30,9 +30,9 @@ GTFS plays a pivotal role in human mobility, traffic, and transport research. It
 
 ## GTFS in Developing Countries: A Case Study of Vietnam
 
-This repository includes a case study focusing on Vietnam, specifically Hanoi and Ho Chi Minh City (HCMC). Both cities are undergoing significant transformations in their public transit systems. Hanoi and HCMC feature extensive bus networks, and Hanoi has recently introduced a new metro system to enhance urban mobility.
+This repository includes a case study focusing on Vietnam, specifically Hanoi and Ho Chi Minh City (HCMC). Both cities are undergoing significant transformations in their public transit systems. Hanoi and HCMC feature extensive bus networks, and both Hanoi and HCMC has recently introduced a new metro system to enhance urban mobility.
 
-Initial analysis of bus transit in HCMC has been conducted and is available in the `vinif_bus_time_tables` section. Further analyses using these data sources will be updated regularly.
+Initial analysis of bus transit in HCMC has been conducted and is available in the `vinif_bus_time_tables` repo. Further analyses using these data sources will be updated regularly.
 
 ### Data Sources for the Vietnam Case Study:
 - [GTFS Data for Hanoi - TUMI Data Hub](https://hub.tumidata.org/dataset/gtfs-hanoi/resource/4b9a9939-ff2a-4fe9-985f-63b927b39655)
