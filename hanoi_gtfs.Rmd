@@ -1,0 +1,130 @@
+---
+title: "gtfs_hanoi"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE, error=FALSE}
+library(rio)
+library(here)
+library(readr) 
+library(lubridate)
+library(ggplot2)
+library(osmdata)
+library(sf)
+library(ggspatial)
+library(ggthemes)
+```
+
+## Define directory 
+
+```{r}
+# Define GTFS directory 
+gtfs_dir <- here("gtfs_hanoi")
+
+gtfs_data <- list.files(gtfs_dir, pattern = "\\.txt$", full.names = TRUE) %>%
+  setNames(gsub("\\.txt$", "", basename(.))) %>%
+  lapply(import)
+
+list2env(gtfs_data, envir = .GlobalEnv)
+lapply(gtfs_data, head)
+```
+
+## Data Wrangling 
+
+```{r}
+n_distinct(routes$route_id)
+distinct_table <- routes %>% 
+  distinct(routes$route_id)
+```
+
+```{r}
+# Function to count and list distinct values for a given dataframe and column
+process_distinct <- function(data, column_name) {
+  distinct_count <- n_distinct(data[[column_name]])
+  distinct_table <- data %>% distinct(.data[[column_name]])
+  
+  list(
+    Count = distinct_count,
+    Distinct_Values = distinct_table
+  )
+}
+
+# List of datasets and corresponding columns to process
+datasets <- list(
+  list(data = routes, column = "route_id"),
+  list(data = stop_times, column = "stop_sequence"),
+  list(data = stop_times, column = "stop_id")
+)
+
+# Apply the function to each dataset
+results <- lapply(datasets, function(ds) process_distinct(ds$data, ds$column))
+
+# Display results
+for (i in seq_along(results)) {
+  cat("\nProcessing:", datasets[[i]]$column, "\n")
+  print(results[[i]]$Count)
+  print(results[[i]]$Distinct_Values)
+}
+```
+
+## Stop Networks 
+
+```{r}
+stop_df <- stops %>% select(stop_id, stop_lat, stop_lon)
+
+ggplot(stop_df, aes(x = stop_lon, y = stop_lat)) +
+  geom_point(color = "blue", size = 1) +
+  labs(title = "Hanoi GTFS Stops Visualization",
+       x = "Longitude",
+       y = "Latitude") +
+  theme_minimal()
+```
+
+# Stop sequences visualisation 
+
+```{r}
+# To visualize stop sequences from a GTFS dataset, you'll typically need data from both stops.txt and stop_times.txt. 
+# The stops.txt. contains stop is, stop long, stop lat
+# The stop_times.txt file contains trip_id, stop_id, and stop_sequence which indicate the order in which the stops are visited
+
+# Merge stops and stop_times data to get lat/lon with sequence
+merged_data <- stop_times %>%
+  inner_join(stops, by = "stop_id") %>%
+  select(trip_id, stop_id, stop_sequence, stop_lat, stop_lon)
+
+# Filter for a specific trip (optional) to make the visualization clearer
+trip_id_example <- merged_data$trip_id[1]  # Selecting the first trip_id as an example
+trip_data <- merged_data %>%
+  filter(trip_id == trip_id_example) %>%
+  arrange(stop_sequence)
+
+# Visualize the stop sequence as a connected line plot
+ggplot(trip_data, aes(x = stop_lon, y = stop_lat)) +
+  geom_path(aes(group = trip_id), color = "red", size = 1) +  # Connect stops in sequence
+  geom_point(color = "blue", size = 2) +                      # Plot individual stops
+  geom_text(aes(label = stop_sequence), vjust = -1, size = 3) + # Label with stop sequence
+  labs(title = paste("Stop Sequence for Trip ID:", trip_id_example),
+       x = "Longitude",
+       y = "Latitude") +
+  theme_minimal()
+```
+
+```{r}
+if (!require("leaflet")) install.packages("leaflet")
+
+library(leaflet)
+
+# Interactive Map
+leaflet(trip_data) %>%
+  addTiles() %>%
+  addPolylines(lng = ~stop_lon, lat = ~stop_lat, color = "red", weight = 3, group = ~trip_id) %>%
+  addCircleMarkers(lng = ~stop_lon, lat = ~stop_lat, radius = 5, color = "blue", fillOpacity = 0.8,
+                   label = ~paste("Stop Sequence:", stop_sequence)) %>%
+  addLegend("bottomright", colors = "red", labels = paste("Trip ID:", trip_id_example),
+            title = "Route Visualization")
+
+```
