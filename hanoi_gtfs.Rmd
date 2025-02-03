@@ -71,6 +71,14 @@ for (i in seq_along(results)) {
 }
 ```
 
+## Create plots folder 
+
+```{r}
+if (!dir.exists("plots_hanoi")) {
+  dir.create("plots_hanoi")
+}
+```
+
 ## Stop Networks 
 
 ```{r}
@@ -82,11 +90,14 @@ ggplot(stop_df, aes(x = stop_lon, y = stop_lat)) +
        x = "Longitude",
        y = "Latitude") +
   theme_minimal()
+
+ggsave(filename = "plots_hanoi/stop network", plot = stop_sequence, width = 8, height = 6, dpi = 300)
+
 ```
 
 # Stop sequences visualisation 
 
-```{r}
+```{r dev = "png"}
 # To visualize stop sequences from a GTFS dataset, you'll typically need data from both stops.txt and stop_times.txt. 
 # The stops.txt. contains stop is, stop long, stop lat
 # The stop_times.txt file contains trip_id, stop_id, and stop_sequence which indicate the order in which the stops are visited
@@ -103,7 +114,7 @@ trip_data <- merged_data %>%
   arrange(stop_sequence)
 
 # Visualize the stop sequence as a connected line plot
-ggplot(trip_data, aes(x = stop_lon, y = stop_lat)) +
+stop_sequence <- ggplot(trip_data, aes(x = stop_lon, y = stop_lat)) +
   geom_path(aes(group = trip_id), color = "red", size = 1) +  # Connect stops in sequence
   geom_point(color = "blue", size = 2) +                      # Plot individual stops
   geom_text(aes(label = stop_sequence), vjust = -1, size = 3) + # Label with stop sequence
@@ -111,20 +122,21 @@ ggplot(trip_data, aes(x = stop_lon, y = stop_lat)) +
        x = "Longitude",
        y = "Latitude") +
   theme_minimal()
+
+ggsave(filename = "plots_hanoi/stop sequence.png", plot = stop_sequence, width = 8, height = 6, dpi = 300)
 ```
 
 ```{r}
+# install and load package 
 if (!require("leaflet")) install.packages("leaflet")
-
 library(leaflet)
 
 # Interactive Map
-leaflet(trip_data) %>%
+leaflet_map <- leaflet(trip_data) %>%
   addTiles() %>%
   addPolylines(lng = ~stop_lon, lat = ~stop_lat, color = "red", weight = 3, group = ~trip_id) %>%
   addCircleMarkers(lng = ~stop_lon, lat = ~stop_lat, radius = 5, color = "blue", fillOpacity = 0.8,
                    label = ~paste("Stop Sequence:", stop_sequence)) %>%
   addLegend("bottomright", colors = "red", labels = paste("Trip ID:", trip_id_example),
             title = "Route Visualization")
-
 ```
