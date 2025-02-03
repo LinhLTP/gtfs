@@ -38,6 +38,3 @@ Initial analysis of bus transit in HCMC has been conducted and is available in t
 - [GTFS Data for Hanoi - TUMI Data Hub](https://hub.tumidata.org/dataset/gtfs-hanoi/resource/4b9a9939-ff2a-4fe9-985f-63b927b39655)
 - [GTFS Data for Hanoi - World Bank](https://datacatalog.worldbank.org/search/dataset/0038236/Hanoi--Vietnam---General-Transit-Feed-Specification--GTFS-)
 - [Vietnam Bus Maps Feed List](https://busmaps.com/en/vietnam/feedlist)
-
-This repository aims to contribute to the growing body of knowledge in public transportation analysis, providing tools and insights for researchers, planners, and policymakers.
-
