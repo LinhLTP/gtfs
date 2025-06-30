@@ -1,4 +1,4 @@
-# General Transit Feed Specification (GTFS) 
+# Realtime General Transit Feed Specification (GTFS) 
 
 ## Introduction
 
