@@ -1,12 +1,4 @@
-# Realtime General Transit Feed Specification (GTFS RT) 
-
-## Introduction
-
-The **Realtime General Transit Feed Specification (GTFS RT)** is a standard format for public transportation schedules and associated geographic information. It enables transit agencies to publish their data in a format that can be easily consumed by a wide range of applications and researchers. GTFS data includes details about routes, stops, trips, and schedules, making it invaluable for analysing and optimising public transport systems.
-
-The importance of GTFS lies in its role in enhancing data-driven decision-making for urban mobility. It facilitates the integration of public transit data into navigation apps, transit planning tools, and research models, thereby improving the efficiency and accessibility of public transport systems worldwide.
-
-GTFS plays a pivotal role in human mobility, traffic, and transport research. It provides a foundation for innovative approaches to public transport emission analysis, enabling researchers and policymakers to assess environmental impacts more accurately. This repository presents initial analyses and data visualisations using GTFS data to demonstrate its application in real-world scenarios.
+# Static General Transit Feed Specification
 
 ## Useful Sources for GTFS
 
